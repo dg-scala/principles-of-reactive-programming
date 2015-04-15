@@ -34,9 +34,9 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
   }
 
   property("min2largeThenSmall") = forAll { a: Int =>
-    val h = insert(a - 1, insert(a, empty))
-    findMin(h) == a - 1
-    findMin(deleteMin(h)) == a
+    val h = insert(1234, insert(1212, empty))
+    findMin(h) == 1212
+    findMin(deleteMin(h)) == 1234
   }
 
   property("min2smallThenLarge") = forAll { a: Int =>
@@ -86,16 +86,22 @@ abstract class QuickCheckHeap extends Properties("Heap") with IntHeap {
   }
 
   property("meld2and1") = forAll { a: Int =>
-    val h1 = insert(2, insert(1, empty))
-    val h2 = insert(3, insert(4, empty))
+    val h1 = insert(-2, insert(1, empty))
+    val h2 = insert(3, insert(-4, empty))
     val h12 = meld(h1, h2)
     val h21 = meld(h2, h1)
-    1 == findMin(h12) && 1 == findMin(h21)
-    2 == findMin(deleteMin(h12)) && 2 == findMin(deleteMin(h21))
-    3 == findMin(deleteMin(deleteMin(h12))) && 3 == findMin(deleteMin(deleteMin(h21)))
-    4 == findMin(deleteMin(deleteMin(deleteMin(h12)))) && 4 == findMin(deleteMin(deleteMin(deleteMin(h21))))
+    -4 == findMin(h12) && -4 == findMin(h21)
+    -2 == findMin(deleteMin(h12)) && -2 == findMin(deleteMin(h21))
+    1 == findMin(deleteMin(deleteMin(h12))) && 1 == findMin(deleteMin(deleteMin(h21)))
+    3 == findMin(deleteMin(deleteMin(deleteMin(h12)))) && 3 == findMin(deleteMin(deleteMin(deleteMin(h21))))
   }
 
+  property("twoRandomHeaps") = forAll { (h1: H, h2: H) =>
+    val m1 = findMin(h1)
+    val m2 = findMin(h2)
+    m1 == findMin(meld(h1, h2)) || m2 == findMin(meld(h1, h2))
+    m1 == findMin(meld(h2, h1)) || m2 == findMin(meld(h2, h1))
+  }
 
   lazy val genHeap: Gen[H] = for {
     i <- arbitrary[Int]
