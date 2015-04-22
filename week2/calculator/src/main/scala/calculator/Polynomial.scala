@@ -11,17 +11,17 @@ object Polynomial {
       c: Signal[Double], delta: Signal[Double]): Signal[Set[Double]] = {
 
     def roots: Set[Double] = {
-      val d = delta()
-      if (d < 0) {
+      val d = computeDelta(a, b, c)
+      if (d() < 0) {
         Set()
       }
-      if (d == 0) {
+      if (d() == 0) {
         Set() + (-b() / (2 * a()))
       }
       else {
         Set() + (
-          (-b() - sqrt(d)) / (2 * a()),
-          (-b() + sqrt(d)) / (2 * a()))
+          (-b() - sqrt(d())) / (2 * a()),
+          (-b() + sqrt(d())) / (2 * a()))
       }
     }
 
