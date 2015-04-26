@@ -11,9 +11,7 @@ object Polynomial {
                        c: Signal[Double], delta: Signal[Double]): Signal[Set[Double]] = {
 
     def roots(): Set[Double] = {
-      val _d = delta()
-      val _a = a()
-      val _b = b()
+      val (_a, _b, _c, _d) = (a(), b(), c(), delta())
 
       if (_d == 0) {
         Set() + (-_b / (2 * _a))
