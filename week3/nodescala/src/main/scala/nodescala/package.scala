@@ -1,3 +1,5 @@
+import java.util.concurrent.TimeoutException
+
 import scala.language.postfixOps
 import scala.io.StdIn
 import scala.util._
@@ -75,7 +77,14 @@ package object nodescala {
 
     /** Returns a future with a unit value that is completed after time `t`.
       */
-    def delay(t: Duration): Future[Unit] = Await.ready(Future {}, t)
+    def delay(t: Duration): Future[Unit] = Future {
+      try {
+        val p = Promise()
+        Await.ready(p.future, t)
+      } catch {
+        case _: TimeoutException => ()
+      }
+    }
 
     /** Completes this future with user input.
       */

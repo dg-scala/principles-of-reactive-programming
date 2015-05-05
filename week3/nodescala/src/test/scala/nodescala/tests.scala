@@ -1,5 +1,7 @@
 package nodescala
 
+import java.util.Calendar
+
 import scala.language.postfixOps
 import scala.util.{Try, Success, Failure}
 import scala.collection._
@@ -73,7 +75,7 @@ class NodeScalaSuite extends FunSuite {
       case e: Exception => // ok !
     }
   }
-  test("Continue with") {
+  test("Continue with test") {
     def cont(ft: Future[Int]): String = {
       println("Helga the Wife")
       "a"
@@ -95,7 +97,7 @@ class NodeScalaSuite extends FunSuite {
       case e: Exception => assert(e.getMessage() == "Vikings")
     }
   }
-  test("Continue") {
+  test("Continue test") {
     def cont(t: Try[Int]): String = {
       println("2nd")
       t match {
@@ -115,6 +117,21 @@ class NodeScalaSuite extends FunSuite {
       throw new Exception
     }
     assert(Await.result(g.continue(cont), 1 seconds) == "z")
+  }
+  test("Run test") {
+    val working = Future.run() { ct =>
+      Future {
+        while (ct.nonCancelled) {
+          println(s"working ${Calendar.getInstance().getTime()}")
+          Thread.sleep(1000)
+        }
+        println("done")
+      }
+    }
+    Future.delay(5 seconds) onSuccess {
+      case _ => working.unsubscribe()
+    }
+    Thread.sleep(6000)
   }
 
   class DummyExchange(val request: Request) extends Exchange {
