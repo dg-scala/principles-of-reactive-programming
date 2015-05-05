@@ -131,7 +131,6 @@ class NodeScalaSuite extends FunSuite {
     Future.delay(5 seconds) onSuccess {
       case _ => working.unsubscribe()
     }
-    Thread.sleep(6000)
   }
 
   class DummyExchange(val request: Request) extends Exchange {
