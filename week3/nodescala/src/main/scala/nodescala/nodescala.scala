@@ -27,7 +27,7 @@ trait NodeScala {
    *
    *  @param exchange     the exchange used to write the response back
    *  @param token        the cancellation token
-   *  @param body         the response to write back
+   *  @param response     the response to write back
    */
   private def respond(exchange: Exchange, token: CancellationToken, response: Response): Unit = ???
 
