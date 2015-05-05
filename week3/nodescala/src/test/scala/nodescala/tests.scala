@@ -77,60 +77,52 @@ class NodeScalaSuite extends FunSuite {
   }
   test("Continue with test") {
     def cont(ft: Future[Int]): String = {
-      println("Helga the Wife")
       "a"
     }
 
-    val f = Future {
-      println("Haggar the Horrible")
-      1
-    }
+    val f = Future {1}
     assert(Await.result(f.continueWith(cont), 1 seconds) == "a")
 
     val g = Future {
-      println("Vikings will fail!")
-      throw new Exception("Vikings")
+      throw new Exception("Barf")
     }
     try {
       assert(Await.result(g.continueWith(cont), 1 seconds) == ???)
     } catch {
-      case e: Exception => assert(e.getMessage() == "Vikings")
+      case e: Exception => assert(e.getMessage() == "Barf")
     }
   }
   test("Continue test") {
     def cont(t: Try[Int]): String = {
-      println("2nd")
       t match {
         case Success(x) => "a"
         case Failure(e) => "z"
       }
     }
 
-    val f = Future {
-      println("1st")
-      1
-    }
+    val f = Future {1}
     assert(Await.result(f.continue(cont), 1 seconds) == "a")
 
     val g= Future {
-      println("Failed but continue")
       throw new Exception
     }
     assert(Await.result(g.continue(cont), 1 seconds) == "z")
   }
   test("Run test") {
+    var count = 0
     val working = Future.run() { ct =>
       Future {
         while (ct.nonCancelled) {
-          println(s"working ${Calendar.getInstance().getTime()}")
-          Thread.sleep(1000)
+          count += 1
+          Thread.sleep(250)
         }
-        println("done")
       }
     }
-    Future.delay(5 seconds) onSuccess {
+    Future.delay(1 seconds) onSuccess {
       case _ => working.unsubscribe()
     }
+    Thread.sleep(1100)
+    assert(count == 4)
   }
 
   class DummyExchange(val request: Request) extends Exchange {
