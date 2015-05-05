@@ -30,15 +30,101 @@ class NodeScalaSuite extends FunSuite {
       case t: TimeoutException => // ok!
     }
   }
+  test("First future that completes from the list") {
+    val fs = List(
+      Future {
+        Thread.sleep(2)
+        1
+      },
+      Future {
+        "successful"
+      },
+      Future {
+        Thread.sleep(3)
+        throw new Exception
+      }
+    )
+    assert(Await.result(Future.any(fs), 0 nanos) == "successful")
 
-  
-  
+    try {
+      val dud = List()
+      assert(Await.result(Future.any(dud), 0 nanos) == ???)
+    } catch {
+      case t: NoSuchElementException => // ok !
+    }
+  }
+  test("All futures in a list complete") {
+    val empty = List()
+    assert(Await.result(Future.all(empty), 1 second) == Nil)
+
+    val one = List(Future(1))
+    assert(Await.result(Future.all(one), 1 second) == List(1))
+
+    val two = List(Future(1), Future(2))
+    assert(Await.result(Future.all(two), 1 second) == List(1, 2))
+
+    val three = List(Future(1), Future(2), Future(3))
+    assert(Await.result(Future.all(three), 1 second) == List(1, 2, 3))
+
+    val fts = List(Future(1), Future(throw new Exception), Future(3))
+    try {
+      assert(Await.result(Future.all(fts), 1 second) == ???)
+    } catch {
+      case e: Exception => // ok !
+    }
+  }
+  test("Continue with") {
+    def cont(ft: Future[Int]): String = {
+      println("Helga the Wife")
+      "a"
+    }
+
+    val f = Future {
+      println("Haggar the Horrible")
+      1
+    }
+    assert(Await.result(f.continueWith(cont), 1 seconds) == "a")
+
+    val g = Future {
+      println("Vikings will fail!")
+      throw new Exception("Vikings")
+    }
+    try {
+      assert(Await.result(g.continueWith(cont), 1 seconds) == ???)
+    } catch {
+      case e: Exception => assert(e.getMessage() == "Vikings")
+    }
+  }
+  test("Continue") {
+    def cont(t: Try[Int]): String = {
+      println("2nd")
+      t match {
+        case Success(x) => "a"
+        case Failure(e) => "z"
+      }
+    }
+
+    val f = Future {
+      println("1st")
+      1
+    }
+    assert(Await.result(f.continue(cont), 1 seconds) == "a")
+
+    val g= Future {
+      println("Failed but continue")
+      throw new Exception
+    }
+    assert(Await.result(g.continue(cont), 1 seconds) == "z")
+  }
+
   class DummyExchange(val request: Request) extends Exchange {
     @volatile var response = ""
     val loaded = Promise[String]()
+
     def write(s: String) {
       response += s
     }
+
     def close() {
       loaded.success(response)
     }
@@ -91,6 +177,7 @@ class NodeScalaSuite extends FunSuite {
       l.emit(req)
     }
   }
+
   test("Server should serve requests") {
     val dummy = new DummyServer(8191)
     val dummySubscription = dummy.start("/testDir") {
