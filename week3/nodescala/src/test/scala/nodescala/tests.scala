@@ -35,18 +35,18 @@ class NodeScalaSuite extends FunSuite {
   test("First future that completes from the list") {
     val fs = List(
       Future {
-        Thread.sleep(2)
+        Thread.sleep(500)
         1
       },
       Future {
         "successful"
       },
       Future {
-        Thread.sleep(3)
+        Thread.sleep(1000)
         throw new Exception
       }
     )
-    assert(Await.result(Future.any(fs), 0 nanos) == "successful")
+    assert(Await.result(Future.any(fs), 1 millis) == "successful")
 
     try {
       val dud = List()
