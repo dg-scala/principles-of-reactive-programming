@@ -120,7 +120,7 @@ package object nodescala {
       try {
         Await.result(f, 0 nanos)
       } catch {
-        case e: Throwable =>
+        case e: Exception =>
           throw new NoSuchElementException
       }
     }
@@ -180,7 +180,7 @@ package object nodescala {
     * returns a `cancellationToken` which is cancelled by calling `unsubscribe`.
     *
     * After calling `unsubscribe` once, the associated `cancellationToken` will
-    * forever remain cancelled -- its `isCancelled` will return `false``.
+    * forever remain cancelled -- its `isCancelled` will return `false`.
     */
   trait CancellationTokenSource extends Subscription {
     def cancellationToken: CancellationToken
