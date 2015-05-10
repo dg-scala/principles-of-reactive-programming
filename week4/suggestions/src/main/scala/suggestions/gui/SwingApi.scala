@@ -19,11 +19,12 @@ import rx.lang.scala.{Subscription, Observable}
   * Extractors for abstract events like `ValueChanged` have also
   * been factored out into corresponding abstract `val`s.
   */
-trait SwingApi {
+trait
+SwingApi {
 
   type ValueChanged <: Event
 
-  val ValueChanged: {
+  val ValueChanged: { 
     def unapply(x: Event): Option[TextField]
   }
 
@@ -52,7 +53,14 @@ trait SwingApi {
       * @return an observable with a stream of text field updates
       */
     def textValues: Observable[String] = Observable.create(observer =>
-      Subscription { ??? }
+      Subscription {
+        field.subscribe {
+          case ValueChanged => ValueChanged.unapply {
+            case Some(tf) => observer.onNext(tf)
+            case None => observer.onCompleted()
+          }
+        }
+      }
     )
   }
 
@@ -64,7 +72,9 @@ trait SwingApi {
       * @return an observable with a stream of buttons that have been clicked
       */
     def clicks: Observable[Button] = Observable.create(observer =>
-      Subscription { ??? }
+      Subscription {
+        ???
+      }
     )
   }
 
