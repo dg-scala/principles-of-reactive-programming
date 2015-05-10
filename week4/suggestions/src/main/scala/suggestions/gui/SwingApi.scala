@@ -24,7 +24,7 @@ SwingApi {
 
   type ValueChanged <: Event
 
-  val ValueChanged: { 
+  val ValueChanged: {
     def unapply(x: Event): Option[TextField]
   }
 
@@ -52,16 +52,23 @@ SwingApi {
       * @param field the text field
       * @return an observable with a stream of text field updates
       */
-    def textValues: Observable[String] = Observable.create(observer =>
-      Subscription {
+    def textValues: Observable[String] = Observable.create {
+      observer =>
         field.subscribe {
-          case ValueChanged => ValueChanged.unapply {
-            case Some(tf) => observer.onNext(tf)
-            case None => observer.onCompleted()
+          case e: ValueChanged => ValueChanged.unapply(e) match {
+            case Some(tf) => observer.onNext(tf.text)
+            case _ => ()
           }
         }
-      }
-    )
+        Subscription.apply {
+          field.unsubscribe {
+            case e: ValueChanged => ValueChanged.unapply(e) match {
+              case None => observer.onCompleted()
+              case _ => ()
+            }
+          }
+        }
+    }
   }
 
   implicit class ButtonOps(button: Button) {
@@ -71,11 +78,23 @@ SwingApi {
       * @param field the button
       * @return an observable with a stream of buttons that have been clicked
       */
-    def clicks: Observable[Button] = Observable.create(observer =>
-      Subscription {
-        ???
-      }
-    )
+    def clicks: Observable[Button] = Observable.create {
+      observer =>
+        button.subscribe {
+          case e: ButtonClicked => ButtonClicked.unapply(e) match {
+            case Some(b) => observer.onNext(b)
+            case _ => ()
+          }
+        }
+        Subscription.apply {
+          button.unsubscribe {
+            case e: ButtonClicked => ButtonClicked.unapply(e) match {
+              case None => observer.onCompleted()
+              case _ => ()
+            }
+          }
+        }
+    }
   }
 
 }
