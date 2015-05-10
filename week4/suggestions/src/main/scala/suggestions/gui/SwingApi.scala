@@ -52,17 +52,17 @@ trait SwingApi {
       * @return an observable with a stream of text field updates
       */
     def textValues: Observable[String] = ???
+  }
 
-    implicit class ButtonOps(button: Button) {
+  implicit class ButtonOps(button: Button) {
 
-      /** Returns a stream of button clicks.
-        *
-        * @param field the button
-        * @return an observable with a stream of buttons that have been clicked
-        */
-      def clicks: Observable[Button] = ???
-    }
-
+    /** Returns a stream of button clicks.
+      *
+      * @param field the button
+      * @return an observable with a stream of buttons that have been clicked
+      */
+    def clicks: Observable[Button] = ???
   }
 
 }
+
