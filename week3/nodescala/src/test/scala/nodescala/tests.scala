@@ -147,7 +147,7 @@ class NodeScalaSuite extends FunSuite {
     Thread.sleep(500)
     webpage.loaded.future.now // should not get NoSuchElementException
   }
-  
+
   class DummyExchange(val request: Request) extends Exchange {
     @volatile var response = ""
     val loaded = Promise[String]()
