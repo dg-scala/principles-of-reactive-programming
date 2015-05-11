@@ -54,16 +54,21 @@ SwingApi {
       */
     def textValues: Observable[String] = Observable.create {
       observer =>
+        var completed: Boolean = false
         field.subscribe {
           case e: ValueChanged => ValueChanged.unapply(e) match {
-            case Some(tf) => observer.onNext(tf.text)
+            case Some(tf) => if (!completed) observer.onNext(tf.text)
             case _ => ()
           }
         }
         Subscription.apply {
           field.unsubscribe {
             case e: ValueChanged => ValueChanged.unapply(e) match {
-              case None => observer.onCompleted()
+              case None =>
+                if (!completed) {
+                  completed = true
+                  observer.onCompleted()
+                }
               case _ => ()
             }
           }
@@ -80,16 +85,21 @@ SwingApi {
       */
     def clicks: Observable[Button] = Observable.create {
       observer =>
+        var completed = false
         button.subscribe {
           case e: ButtonClicked => ButtonClicked.unapply(e) match {
-            case Some(b) => observer.onNext(b)
+            case Some(b) => if (!completed) observer.onNext(b)
             case _ => ()
           }
         }
         Subscription.apply {
           button.unsubscribe {
             case e: ButtonClicked => ButtonClicked.unapply(e) match {
-              case None => observer.onCompleted()
+              case None =>
+                if (!completed) {
+                  completed = true
+                  observer.onCompleted()
+                }
               case _ => ()
             }
           }
