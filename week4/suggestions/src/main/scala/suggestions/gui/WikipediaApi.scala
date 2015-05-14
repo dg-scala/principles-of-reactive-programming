@@ -49,7 +49,7 @@ trait WikipediaApi {
       *
       * E.g. `1, 2, 3, !Exception!` should become `Success(1), Success(2), Success(3), Failure(Exception), !TerminateStream!`
       */
-    def recovered: Observable[Try[T]] = obs.map(t => Try(t)).onErrorReturn(e => Failure(e))
+    def recovered: Observable[Try[T]] = obs.map(t => Success(t)).onErrorReturn(Failure(_))
 
     /** Emits the events from the `obs` observable, until `totalSec` seconds have elapsed.
       *
@@ -71,7 +71,7 @@ trait WikipediaApi {
       *
       * num => if (num != 4) Observable.just(num) else Observable.error(new Exception)
       *
-      * We should, for example, get:
+        * We should, for example, get:
       *
       * Success(1), Success(2), Success(3), Failure(new Exception), Success(5)
       *
@@ -84,7 +84,7 @@ trait WikipediaApi {
       *
       * Observable(Success(1), Succeess(1), Succeess(1), Succeess(2), Succeess(2), Succeess(2), Succeess(3), Succeess(3), Succeess(3))
       */
-    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = obs.flatMap(requestMethod).recovered
+    def concatRecovered[S](requestMethod: T => Observable[S]): Observable[Try[S]] = obs.concatMap(requestMethod(_).recovered)
   }
 
 }

@@ -84,12 +84,11 @@ class WikipediaApiTest extends FunSuite {
     }
     assert(total == (1 + 1 + 1 + 2 + 3 + 3 + 3), s"Sum: $total")
   }
-  test("concatRecovered given test case 2") {
+  test("concatRecovered given test case 2 from Scaladoc") {
     val request = Observable.just(1, 2, 3).concatRecovered(num => Observable.just(num, num, num))
     val expectedString = "List(Success(1), Success(1), Success(1), Success(2), Success(2), Success(2), Success(3), Success(3), Success(3))"
     val actual = request.toBlocking.toList.toString
     println(actual)
     assert(actual == expectedString, actual)
   }
-
 }
