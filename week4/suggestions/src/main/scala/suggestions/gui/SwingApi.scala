@@ -58,7 +58,7 @@ SwingApi {
         field.subscribe {
           case e: ValueChanged => ValueChanged.unapply(e) match {
             case Some(tf) => if (!completed) observer.onNext(tf.text)
-            case _ => ()
+            case _ => None
           }
         }
         Subscription.apply {
@@ -69,7 +69,7 @@ SwingApi {
                   completed = true
                   observer.onCompleted()
                 }
-              case _ => ()
+              case _ => None
             }
           }
         }
@@ -89,7 +89,7 @@ SwingApi {
         button.subscribe {
           case e: ButtonClicked => ButtonClicked.unapply(e) match {
             case Some(b) => if (!completed) observer.onNext(b)
-            case _ => ()
+            case _ => None
           }
         }
         Subscription.apply {
@@ -100,7 +100,7 @@ SwingApi {
                   completed = true
                   observer.onCompleted()
                 }
-              case _ => ()
+              case _ => None
             }
           }
         }

@@ -66,5 +66,30 @@ class WikipediaApiTest extends FunSuite {
     }
     assert(total == (1 + 1 + 2 + 1 + 2 + 3), s"Sum: $total")
   }
+  test("WikipediaApi should correctly use concatRecovered, concatenating many responses, even with exceptions") {
+    val requests = Observable.just(1, 2, 3)
+    val remoteComputation = (num: Int) =>
+      if (num != 2) Observable.just(num, num, num)
+      else Observable.just(num) ++ Observable.error(new Exception) ++ Observable.just(num)
+    val responses = requests concatRecovered remoteComputation
+    val sum = responses.foldLeft(0) { (acc, tn) =>
+      tn match {
+        case Success(n) => acc + n
+        case Failure(t) => acc // Failures are 0
+      }
+    }
+    var total = -1
+    val sub = sum.subscribe {
+      s => total = s
+    }
+    assert(total == (1 + 1 + 1 + 2 + 3 + 3 + 3), s"Sum: $total")
+  }
+  test("concatRecovered given test case 2") {
+    val request = Observable.just(1, 2, 3).concatRecovered(num => Observable.just(num, num, num))
+    val expectedString = "List(Success(1), Success(1), Success(1), Success(2), Success(2), Success(2), Success(3), Success(3), Success(3))"
+    val actual = request.toBlocking.toList.toString
+    println(actual)
+    assert(actual == expectedString, actual)
+  }
 
 }
