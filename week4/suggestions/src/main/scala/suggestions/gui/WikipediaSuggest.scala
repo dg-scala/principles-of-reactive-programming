@@ -1,6 +1,7 @@
 package suggestions
 package gui
 
+import scala.collection.SeqProxy
 import scala.collection.mutable.ListBuffer
 import scala.collection.JavaConverters._
 import scala.concurrent._
@@ -99,9 +100,8 @@ object WikipediaSuggest extends SimpleSwingApplication with ConcreteSwingApi wit
 
     // TO IMPLEMENT
     val selections: Observable[String] = button.clicks.collect {
-      b =>
-        val selItems: Seq[String] = suggestionList.selection.items
-        if (selItems.length > 0) selItems.apply(0)
+      case _ if suggestionList.selection.items.length > 0 =>
+        suggestionList.selection.items.head
     }
 
     // TO IMPLEMENT

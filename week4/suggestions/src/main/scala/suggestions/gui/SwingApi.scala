@@ -19,8 +19,7 @@ import rx.lang.scala.{Subscription, Observable}
   * Extractors for abstract events like `ValueChanged` have also
   * been factored out into corresponding abstract `val`s.
   */
-trait
-SwingApi {
+trait SwingApi {
 
   type ValueChanged <: Event
 
