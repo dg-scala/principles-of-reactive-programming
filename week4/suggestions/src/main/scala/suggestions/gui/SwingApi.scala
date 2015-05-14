@@ -61,15 +61,9 @@ trait SwingApi {
           }
         }
         Subscription.apply {
-          field.unsubscribe {
-            case e: ValueChanged => ValueChanged.unapply(e) match {
-              case None =>
-                if (!completed) {
-                  completed = true
-                  observer.onCompleted()
-                }
-              case _ => None
-            }
+          if (!completed) {
+            completed = true
+            observer.onCompleted()
           }
         }
     }
@@ -92,15 +86,9 @@ trait SwingApi {
           }
         }
         Subscription.apply {
-          button.unsubscribe {
-            case e: ButtonClicked => ButtonClicked.unapply(e) match {
-              case None =>
-                if (!completed) {
-                  completed = true
-                  observer.onCompleted()
-                }
-              case _ => None
-            }
+          if (!completed) {
+            completed = true
+            observer.onCompleted()
           }
         }
     }

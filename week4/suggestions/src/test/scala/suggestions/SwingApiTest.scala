@@ -127,7 +127,7 @@ class SwingApiTest extends FunSuite {
     Thread.sleep(1000)
 
     assert(observed == Seq("T", "Tu", "Tur", "Turi", "Turin", "Turing"), observed)
-    assert(observed2 == Seq("T", "Tu", "Tur", "Turi", "Turin", "Turing"), observed2)
+    assert(observed2 == Seq("T", "Tu", "Tur", "Turi", "Turin", "Turing", "Completed!"), observed2)
   }
 
 }
