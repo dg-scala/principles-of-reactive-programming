@@ -99,9 +99,54 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   // optional
   def receive = normal
 
+  def insert(key: Position, id: Int, el: Int) =
+    subtrees.get(key) match {
+      case None =>
+        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, false)))
+        sender ! OperationFinished(id)
+      case Some(act) => act ! Insert(sender, id, el)
+    }
+  
+  def contains(key: Position, id: Int, el: Int) =
+    subtrees.get(key) match {
+      case None => sender ! ContainsResult(id, false)
+      case Some(act) => act ! Contains(sender, id, el)
+    }
+  
+  def remove(key: Position, id: Int, el: Int) =
+    subtrees.get(key) match {
+      case None => sender ! OperationFinished(id)
+      case Some(acc) => acc ! Remove(sender, id, el)
+    }
+  
   // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = { 
+    case Insert(s, id, el) =>
+      if (el == elem) {
+        if (removed) removed = false
+        s ! OperationFinished(id)
+      }
+      else if (el < elem) insert(Left, id, el)
+      else insert(Right, id, el)
+      
+    case Contains(s, id, el) =>
+      if (el == elem)
+        removed match {
+          case true =>  s ! ContainsResult(id, false)
+          case false => s ! ContainsResult(id, true)
+        }
+      else if (el < elem) contains(Left, id, el)
+      else contains(Right, id, el)
+      
+    case Remove(s, id, el) =>
+      if (el == elem) {
+        if (!removed) removed = true
+        s ! OperationFinished(id)
+      }
+      else if (el < elem) remove(Left, id, el)
+      else remove(Right, id, el)      
+  }
 
   // optional
   /** `expected` is the set of ActorRefs whose replies we are waiting for,

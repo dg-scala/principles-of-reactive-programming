@@ -3,3 +3,9 @@
 target
 submission
 project/project
+*.zip
+.cache
+.classpath
+.gitignore
+.project
+.settings
