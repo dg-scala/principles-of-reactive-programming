@@ -106,14 +106,14 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   def insert(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
       case None =>
-        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, false)))
+        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, initiallyRemoved = false)))
         s ! OperationFinished(id)
       case Some(act) => act ! Insert(s, id, el)
     }
   
   def contains(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
-      case None => s ! ContainsResult(id, false)
+      case None => s ! ContainsResult(id, result = false)
       case Some(act) => act ! Contains(s, id, el)
     }
   
