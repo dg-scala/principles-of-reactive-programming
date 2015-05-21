@@ -66,7 +66,11 @@ class BinaryTreeSet extends Actor {
 
   // optional
   /** Accepts `Operation` and `GC` messages. */
-  val normal: Receive = { case _ => ??? }
+  val normal: Receive = { 
+    case Insert(s, id, el) => root ! Insert(s, id, el)
+    case Contains(s, id, el) => root ! Contains(s, id, el)
+    case Remove(s, id, el) => root ! Remove(s, id, el)
+  }
 
   // optional
   /** Handles messages while garbage collection is performed.
@@ -99,24 +103,24 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   // optional
   def receive = normal
 
-  def insert(key: Position, id: Int, el: Int) =
+  def insert(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
       case None =>
         subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, false)))
-        sender ! OperationFinished(id)
-      case Some(act) => act ! Insert(sender, id, el)
+        s ! OperationFinished(id)
+      case Some(act) => act ! Insert(s, id, el)
     }
   
-  def contains(key: Position, id: Int, el: Int) =
+  def contains(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
-      case None => sender ! ContainsResult(id, false)
-      case Some(act) => act ! Contains(sender, id, el)
+      case None => s ! ContainsResult(id, false)
+      case Some(act) => act ! Contains(s, id, el)
     }
   
-  def remove(key: Position, id: Int, el: Int) =
+  def remove(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
-      case None => sender ! OperationFinished(id)
-      case Some(acc) => acc ! Remove(sender, id, el)
+      case None => s ! OperationFinished(id)
+      case Some(acc) => acc ! Remove(s, id, el)
     }
   
   // optional
@@ -127,8 +131,8 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
         if (removed) removed = false
         s ! OperationFinished(id)
       }
-      else if (el < elem) insert(Left, id, el)
-      else insert(Right, id, el)
+      else if (el < elem) insert(Left, s, id, el)
+      else insert(Right, s, id, el)
       
     case Contains(s, id, el) =>
       if (el == elem)
@@ -136,16 +140,16 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
           case true =>  s ! ContainsResult(id, false)
           case false => s ! ContainsResult(id, true)
         }
-      else if (el < elem) contains(Left, id, el)
-      else contains(Right, id, el)
+      else if (el < elem) contains(Left, s, id, el)
+      else contains(Right, s, id, el)
       
     case Remove(s, id, el) =>
       if (el == elem) {
         if (!removed) removed = true
         s ! OperationFinished(id)
       }
-      else if (el < elem) remove(Left, id, el)
-      else remove(Right, id, el)      
+      else if (el < elem) remove(Left, s, id, el)
+      else remove(Right, s, id, el)      
   }
 
   // optional
