@@ -70,6 +70,7 @@ class BinaryTreeSet extends Actor {
     case Insert(s, id, el) => root ! Insert(s, id, el)
     case Contains(s, id, el) => root ! Contains(s, id, el)
     case Remove(s, id, el) => root ! Remove(s, id, el)
+    case GC => ???
   }
 
   // optional
@@ -122,7 +123,7 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       case None => s ! OperationFinished(id)
       case Some(acc) => acc ! Remove(s, id, el)
     }
-  
+
   // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
   val normal: Receive = { 
@@ -145,7 +146,9 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
         s ! OperationFinished(id)
       }
       else if (el < elem) remove(Left, s, id, el)
-      else remove(Right, s, id, el)      
+      else remove(Right, s, id, el)
+
+    case CopyTo(newRoot) => ???
   }
 
   // optional
