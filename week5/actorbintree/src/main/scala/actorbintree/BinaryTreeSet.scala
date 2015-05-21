@@ -135,11 +135,7 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       else insert(Right, s, id, el)
       
     case Contains(s, id, el) =>
-      if (el == elem)
-        removed match {
-          case true =>  s ! ContainsResult(id, false)
-          case false => s ! ContainsResult(id, true)
-        }
+      if (el == elem) s ! ContainsResult(id, !removed)
       else if (el < elem) contains(Left, s, id, el)
       else contains(Right, s, id, el)
       
