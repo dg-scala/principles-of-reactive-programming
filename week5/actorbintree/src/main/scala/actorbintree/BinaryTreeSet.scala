@@ -148,14 +148,26 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       else if (el < elem) remove(Left, s, id, el)
       else remove(Right, s, id, el)
 
-    case CopyTo(newRoot) => ???
+    case CopyTo(newRoot) => {
+      newRoot ! Insert(self, 0, elem)
+      context.become(copying(subtrees.values.toSet, false))
+      for { c <- subtrees.values.toSet } yield c ! CopyTo(newRoot)
+    }
   }
 
   // optional
   /** `expected` is the set of ActorRefs whose replies we are waiting for,
     * `insertConfirmed` tracks whether the copy of this node to the new tree has been confirmed.
     */
-  def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = ???
+  def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
+    case CopyFinished => expected match {
+      case Set.empty => 
+        sender ! CopyFinished
+    }
+
+    case OperationFinished(s) =>
+
+  }
 
 
 }
