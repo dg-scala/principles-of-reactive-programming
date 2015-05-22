@@ -41,9 +41,6 @@ object BinaryTreeSet {
   /** Request to perform garbage collection */
   case object GC
 
-  /** Garbage collection finished */
-  case object GCFinished
-
   /** Holds the answer to the Contains request with identifier `id`.
     * `result` is true if and only if the element is present in the tree.
     */
@@ -60,7 +57,7 @@ class BinaryTreeSet extends Actor {
   import BinaryTreeSet._
   import BinaryTreeNode._
 
-  def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true, isRoot = true))
+  def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true))
 
   var root = createRoot
 
@@ -77,7 +74,7 @@ class BinaryTreeSet extends Actor {
     case Contains(s, id, el) => root ! Contains(s, id, el)
     case Remove(s, id, el) => root ! Remove(s, id, el)
     case GC =>
-      println("[DG] GC time!")
+      println("Starting garbage collection")
       val newRoot = createRoot
       context.become(garbageCollecting(createRoot))
       root ! CopyTo(newRoot)
@@ -89,12 +86,15 @@ class BinaryTreeSet extends Actor {
     * all non-removed elements into.
     */
   def garbageCollecting(newRoot: ActorRef): Receive = {
-    case GCFinished =>
-      root ! PoisonPill
-      for { op <- pendingQueue } yield newRoot ! op
+    case CopyFinished =>
+      println(s"About to clear the queue of size ${pendingQueue.length}")
+      for { op: Operation <- pendingQueue } yield newRoot ! op
       pendingQueue = Queue.empty[Operation]
+      println("Moving newRoot to root")
+      root ! PoisonPill
       root = newRoot
-      context.become(normal)
+      context.unbecome()
+      println("Finished garbage collection")
 
     case op: Operation => pendingQueue :+= op
   }
@@ -112,15 +112,14 @@ object BinaryTreeNode {
 
   case object CopyFinished
 
-  def props(elem: Int, initiallyRemoved: Boolean, isRoot: Boolean) = Props(classOf[BinaryTreeNode], elem, initiallyRemoved, isRoot)
+  def props(elem: Int, initiallyRemoved: Boolean) = Props(classOf[BinaryTreeNode], elem, initiallyRemoved)
 }
 
-class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean = false) extends Actor {
+class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
 
   import BinaryTreeNode._
   import BinaryTreeSet._
 
-  val rootNode = isRoot
   var subtrees = Map[Position, ActorRef]()
   var removed = initiallyRemoved
 
@@ -130,20 +129,25 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
   def insert(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
       case None =>
-        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, initiallyRemoved = false, isRoot = false)))
+        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, initiallyRemoved = false)))
+        println(s"Insert $el afresh")
         s ! OperationFinished(id)
       case Some(act) => act ! Insert(s, id, el)
     }
 
   def contains(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
-      case None => s ! ContainsResult(id, result = false)
+      case None =>
+        println(s"Contains false $el")
+        s ! ContainsResult(id, result = false)
       case Some(act) => act ! Contains(s, id, el)
     }
 
   def remove(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
-      case None => s ! OperationFinished(id)
+      case None =>
+        println(s"Remove nowt $el")
+        s ! OperationFinished(id)
       case Some(acc) => acc ! Remove(s, id, el)
     }
 
@@ -152,36 +156,45 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
   val normal: Receive = {
     case Insert(s, id, el) =>
       if (el == elem) {
-        if (removed) removed = false
+        println(s"Insert $el by unremoving")
+        removed = false
         s ! OperationFinished(id)
       }
       else if (el < elem) insert(Left, s, id, el)
       else insert(Right, s, id, el)
 
     case Contains(s, id, el) =>
-      if (el == elem) s ! ContainsResult(id, !removed)
+      if (el == elem) {
+        println(s"Contains true $el")
+        s ! ContainsResult(id, !removed)
+      }
       else if (el < elem) contains(Left, s, id, el)
       else contains(Right, s, id, el)
 
     case Remove(s, id, el) =>
       if (el == elem) {
-        if (!removed) removed = true
+        println(s"Remove $el")
+        removed = true
         s ! OperationFinished(id)
       }
       else if (el < elem) remove(Left, s, id, el)
       else remove(Right, s, id, el)
 
     case CopyTo(newRoot) =>
-      if (subtrees.values.isEmpty)
+      if (subtrees.isEmpty)
         if (removed) notifyParent()
         else {
           context.become(copying(Set.empty, insertConfirmed = false))
+          println(s"Inserting $elem into newRoot")
           newRoot ! Insert(self, 0, elem)
         }
       else {
         context.become(copying(subtrees.values.toSet, insertConfirmed = removed))
+        if (!removed) {
+          println(s"Inserting $elem into newRoot")
+          newRoot ! Insert(self, 0, elem)
+        }
         for { c: ActorRef <- subtrees.values.toSet } yield c ! CopyTo(newRoot)
-        if (!removed) newRoot ! Insert(self, 0, elem)
       }
   }
 
@@ -198,20 +211,8 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
     case OperationFinished(id) =>
       if (expected.isEmpty) notifyParent()
       else context.become(copying(expected, insertConfirmed = true))
-
-    case PoisonPill =>
-      for { c: ActorRef <- subtrees.values.toSet } yield c ! PoisonPill
-      context.stop(self)
   }
 
-  def notifyParent() = {
-    if (isRoot) {
-      println("[DG] -> GCFinished")
-      context.parent ! GCFinished
-    }
-    else {
-      println("[DG] -> CopyFinished")
-      context.parent ! CopyFinished
-    }
-  }
+  def notifyParent() = context.parent ! CopyFinished
+
 }
