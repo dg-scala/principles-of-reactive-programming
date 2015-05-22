@@ -181,11 +181,9 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
     */
   def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
     case CopyFinished =>
-      if (expected == Set.empty[ActorRef]) {
-        if (insertConfirmed) {
-          notifyParent()
-          context.stop(self)
-        }
+      if (insertConfirmed) {
+        notifyParent()
+        context.stop(self)
       }
       else {
         if ((expected - sender) == Set.empty)
