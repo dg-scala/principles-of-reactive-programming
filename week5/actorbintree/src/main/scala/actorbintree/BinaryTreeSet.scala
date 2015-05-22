@@ -90,10 +90,11 @@ class BinaryTreeSet extends Actor {
     */
   def garbageCollecting(newRoot: ActorRef): Receive = {
     case GCFinished =>
+      root ! PoisonPill
+      for { op <- pendingQueue } yield newRoot ! op
+      pendingQueue = Queue.empty[Operation]
       root = newRoot
       context.become(normal)
-      for {op <- pendingQueue} yield newRoot ! op
-      pendingQueue = Queue.empty[Operation]
 
     case op: Operation => pendingQueue :+= op
   }
@@ -171,11 +172,16 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
       else remove(Right, s, id, el)
 
     case CopyTo(newRoot) =>
-      if (removed && subtrees.values.toSet == Set.empty) notifyParent()
+      if (subtrees.values.isEmpty)
+        if (removed) notifyParent()
+        else {
+          context.become(copying(Set.empty, insertConfirmed = false))
+          newRoot ! Insert(self, 0, elem)
+        }
       else {
         context.become(copying(subtrees.values.toSet, insertConfirmed = removed))
+        for { c: ActorRef <- subtrees.values.toSet } yield c ! CopyTo(newRoot)
         if (!removed) newRoot ! Insert(self, 0, elem)
-        for {c: ActorRef <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
       }
   }
 
@@ -185,31 +191,26 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
     */
   def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
     case CopyFinished =>
-      lazy val stillExpected = expected - sender
-      if (stillExpected != Set.empty)
-        context.become(copying(stillExpected, insertConfirmed))
-      else if (insertConfirmed) {
-        notifyParent()
-        context.stop(self)
-      }
+      val stillExpected = expected - sender
+      if (stillExpected.nonEmpty) context.become(copying(stillExpected, insertConfirmed))
+      else if (insertConfirmed) notifyParent()
 
     case OperationFinished(id) =>
-      if (expected == Set.empty) {
-        notifyParent()
-        context.stop(self)
-      }
-      else {
-        context.become(copying(expected, insertConfirmed = true))
-      }
+      if (expected.isEmpty) notifyParent()
+      else context.become(copying(expected, insertConfirmed = true))
+
+    case PoisonPill =>
+      for { c: ActorRef <- subtrees.values.toSet } yield c ! PoisonPill
+      context.stop(self)
   }
 
-  def notifyParent(): Unit = {
+  def notifyParent() = {
     if (isRoot) {
-      println("[DG] Notifying tree set that GCFinished")
+      println("[DG] -> GCFinished")
       context.parent ! GCFinished
     }
     else {
-      println("[DG] Notifying parent that CopyFinished")
+      println("[DG] -> CopyFinished")
       context.parent ! CopyFinished
     }
   }
