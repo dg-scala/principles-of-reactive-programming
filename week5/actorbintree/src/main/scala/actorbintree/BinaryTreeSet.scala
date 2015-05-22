@@ -41,6 +41,9 @@ object BinaryTreeSet {
   /** Request to perform garbage collection */
   case object GC
 
+  /** Garbage collection finished */
+  case object GCFinished
+
   /** Holds the answer to the Contains request with identifier `id`.
     * `result` is true if and only if the element is present in the tree.
     */
@@ -57,7 +60,7 @@ class BinaryTreeSet extends Actor {
   import BinaryTreeSet._
   import BinaryTreeNode._
 
-  def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true))
+  def createRoot: ActorRef = context.actorOf(BinaryTreeNode.props(0, initiallyRemoved = true, isRoot = true))
 
   var root = createRoot
 
@@ -73,7 +76,10 @@ class BinaryTreeSet extends Actor {
     case Insert(s, id, el) => root ! Insert(s, id, el)
     case Contains(s, id, el) => root ! Contains(s, id, el)
     case Remove(s, id, el) => root ! Remove(s, id, el)
-    case GC => ???
+    case GC =>
+      val newRoot = createRoot
+      context.become(garbageCollecting(createRoot))
+      root ! CopyTo(newRoot)
   }
 
   // optional
@@ -81,8 +87,15 @@ class BinaryTreeSet extends Actor {
     * `newRoot` is the root of the new binary tree where we want to copy
     * all non-removed elements into.
     */
-  def garbageCollecting(newRoot: ActorRef): Receive = ???
+  def garbageCollecting(newRoot: ActorRef): Receive = {
+    case GCFinished =>
+      root = newRoot
+      context.unbecome()
+      for {op <- pendingQueue} yield newRoot ! op
+      pendingQueue = Queue.empty[Operation]
 
+    case op: Operation => pendingQueue :+= op
+  }
 }
 
 object BinaryTreeNode {
@@ -97,14 +110,15 @@ object BinaryTreeNode {
 
   case object CopyFinished
 
-  def props(elem: Int, initiallyRemoved: Boolean) = Props(classOf[BinaryTreeNode], elem, initiallyRemoved)
+  def props(elem: Int, initiallyRemoved: Boolean, isRoot: Boolean) = Props(classOf[BinaryTreeNode], elem, initiallyRemoved, isRoot)
 }
 
-class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
+class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean = false) extends Actor {
 
   import BinaryTreeNode._
   import BinaryTreeSet._
 
+  val rootNode = isRoot
   var subtrees = Map[Position, ActorRef]()
   var removed = initiallyRemoved
 
@@ -114,7 +128,7 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   def insert(key: Position, s: ActorRef, id: Int, el: Int) =
     subtrees.get(key) match {
       case None =>
-        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, initiallyRemoved = false)))
+        subtrees += (key -> context.actorOf(BinaryTreeNode.props(el, initiallyRemoved = false, isRoot = false)))
         s ! OperationFinished(id)
       case Some(act) => act ! Insert(s, id, el)
     }
@@ -155,11 +169,10 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       else if (el < elem) remove(Left, s, id, el)
       else remove(Right, s, id, el)
 
-    case CopyTo(newRoot) => {
-      context.become(copying(subtrees.values.toSet, false))
-      newRoot ! Insert(self, 0, elem)
-      for {c <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
-    }
+    case CopyTo(newRoot) =>
+      context.become(copying(subtrees.values.toSet, insertConfirmed = false))
+      if (!removed) newRoot ! Insert(self, 0, elem)
+      for {c: ActorRef <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
   }
 
   // optional
@@ -168,16 +181,31 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
     */
   def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
     case CopyFinished =>
-      if (expected != Set.empty)
-        context.become(copying(expected - sender, insertConfirmed))
-      else
+      if (expected == Set.empty[ActorRef]) {
+        if (insertConfirmed) {
+          notifyParent()
+          context.stop(self)
+        }
+      }
+      else {
+        if ((expected - sender) == Set.empty)
+          notifyParent()
+        else
+          context.become(copying(expected - sender, insertConfirmed))
+      }
 
-
-    case OperationFinished(id) => {
-      sender ! CopyFinished
-      context.stop(self)
-    }
+    case OperationFinished(id) =>
+      if (expected == Set.empty) {
+        notifyParent()
+        context.stop(self)
+      }
+      else {
+        context.become(copying(expected, insertConfirmed = true))
+      }
   }
 
-
+  def notifyParent(): Unit = {
+    if (isRoot) context.parent ! GCFinished
+    else context.parent ! CopyFinished
+  }
 }
