@@ -77,6 +77,7 @@ class BinaryTreeSet extends Actor {
     case Contains(s, id, el) => root ! Contains(s, id, el)
     case Remove(s, id, el) => root ! Remove(s, id, el)
     case GC =>
+      println("[DG] GC time!")
       val newRoot = createRoot
       context.become(garbageCollecting(createRoot))
       root ! CopyTo(newRoot)
@@ -90,7 +91,7 @@ class BinaryTreeSet extends Actor {
   def garbageCollecting(newRoot: ActorRef): Receive = {
     case GCFinished =>
       root = newRoot
-      context.unbecome()
+      context.become(normal)
       for {op <- pendingQueue} yield newRoot ! op
       pendingQueue = Queue.empty[Operation]
 
@@ -170,9 +171,12 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
       else remove(Right, s, id, el)
 
     case CopyTo(newRoot) =>
-      context.become(copying(subtrees.values.toSet, insertConfirmed = false))
-      if (!removed) newRoot ! Insert(self, 0, elem)
-      for {c: ActorRef <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
+      if (removed && subtrees.values.toSet == Set.empty) notifyParent()
+      else {
+        context.become(copying(subtrees.values.toSet, insertConfirmed = removed))
+        if (!removed) newRoot ! Insert(self, 0, elem)
+        for {c: ActorRef <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
+      }
   }
 
   // optional
@@ -181,15 +185,12 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
     */
   def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
     case CopyFinished =>
-      if (insertConfirmed) {
+      lazy val stillExpected = expected - sender
+      if (stillExpected != Set.empty)
+        context.become(copying(stillExpected, insertConfirmed))
+      else if (insertConfirmed) {
         notifyParent()
         context.stop(self)
-      }
-      else {
-        if ((expected - sender) == Set.empty)
-          notifyParent()
-        else
-          context.become(copying(expected - sender, insertConfirmed))
       }
 
     case OperationFinished(id) =>
@@ -203,7 +204,13 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean, isRoot: Boolean =
   }
 
   def notifyParent(): Unit = {
-    if (isRoot) context.parent ! GCFinished
-    else context.parent ! CopyFinished
+    if (isRoot) {
+      println("[DG] Notifying tree set that GCFinished")
+      context.parent ! GCFinished
+    }
+    else {
+      println("[DG] Notifying parent that CopyFinished")
+      context.parent ! CopyFinished
+    }
   }
 }
