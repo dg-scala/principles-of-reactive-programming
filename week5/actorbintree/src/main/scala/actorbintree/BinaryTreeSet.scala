@@ -75,7 +75,7 @@ class BinaryTreeSet extends Actor {
     case Remove(s, id, el) => root ! Remove(s, id, el)
     case GC =>
       val newRoot = createRoot
-      context.become(garbageCollecting(createRoot))
+      context.become(garbageCollecting(newRoot))
       root ! CopyTo(newRoot)
   }
 
