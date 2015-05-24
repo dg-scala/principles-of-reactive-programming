@@ -79,21 +79,21 @@ class BinaryTreeSet extends Actor {
       root ! CopyTo(newRoot)
   }
 
-  // optional
   /** Handles messages while garbage collection is performed.
     * `newRoot` is the root of the new binary tree where we want to copy
     * all non-removed elements into.
     */
   def garbageCollecting(newRoot: ActorRef): Receive = {
     case CopyFinished =>
-      for {op: Operation <- pendingQueue} yield newRoot ! op
-      pendingQueue = Queue.empty[Operation]
-      root ! PoisonPill
+      context.stop(root)
       root = newRoot
-      context.unbecome()
+      context.become(normal)
+      pendingQueue foreach { op: Operation => root ! op }
+      pendingQueue = Queue.empty[Operation]
 
-    case op: Operation => pendingQueue :+= op
+    case op: Operation => pendingQueue = pendingQueue.enqueue(op)
   }
+
 }
 
 object BinaryTreeNode {
@@ -119,7 +119,6 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
   var subtrees = Map[Position, ActorRef]()
   var removed = initiallyRemoved
 
-  // optional
   def receive = normal
 
   def insert(key: Position, s: ActorRef, id: Int, el: Int) =
@@ -142,7 +141,6 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       case Some(acc) => acc ! Remove(s, id, el)
     }
 
-  // optional
   /** Handles `Operation` messages and `CopyTo` requests. */
   val normal: Receive = {
     case Insert(s, id, el) =>
@@ -167,35 +165,32 @@ class BinaryTreeNode(val elem: Int, initiallyRemoved: Boolean) extends Actor {
       else remove(Right, s, id, el)
 
     case CopyTo(newRoot) =>
-      if (subtrees.isEmpty) {
-        if (removed) notifyParent()
-        else {
-          context.become(copying(Set.empty, insertConfirmed = false))
-          newRoot ! Insert(self, 0, elem)
-        }
-      }
+      if (subtrees.isEmpty && removed)
+        notifyParent()
       else {
         context.become(copying(subtrees.values.toSet, insertConfirmed = removed))
         if (!removed) newRoot ! Insert(self, 0, elem)
-        for {c: ActorRef <- subtrees.values.toSet} yield c ! CopyTo(newRoot)
+        subtrees.values foreach { c: ActorRef => c ! CopyTo(newRoot) }
       }
   }
 
-  // optional
   /** `expected` is the set of ActorRefs whose replies we are waiting for,
     * `insertConfirmed` tracks whether the copy of this node to the new tree has been confirmed.
     */
   def copying(expected: Set[ActorRef], insertConfirmed: Boolean): Receive = {
     case CopyFinished =>
       val stillExpected = expected - sender
-      if (stillExpected.nonEmpty) context.become(copying(stillExpected, insertConfirmed))
-      else if (insertConfirmed) notifyParent()
+      if (stillExpected.isEmpty && insertConfirmed) notifyParent()
+      else context.become(copying(stillExpected, insertConfirmed))
 
     case OperationFinished(id) =>
       if (expected.isEmpty) notifyParent()
       else context.become(copying(expected, insertConfirmed = true))
   }
 
-  def notifyParent() = context.parent ! CopyFinished
+  def notifyParent() = {
+    context.parent ! CopyFinished
+    context.become(normal)
+  }
 
 }
