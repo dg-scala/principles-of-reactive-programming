@@ -12,6 +12,7 @@ import akka.actor.PoisonPill
 import akka.actor.OneForOneStrategy
 import akka.actor.SupervisorStrategy
 import akka.util.Timeout
+import scala.Nothing
 
 object Replica {
 
@@ -55,7 +56,24 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // the current set of replicators
   var replicators = Set.empty[ActorRef]
 
-  override def preStart() = arbiter ! Join
+  // DeathWatch on the persistence Actor which can fail intermittently
+  override val supervisorStrategy = OneForOneStrategy() {
+    case _: PersistenceException => Restart
+  }
+
+  // persistence actor for this Replica
+  var persistence = ActorRef.noSender
+
+  // keeps track of the sender of the last unacknowledged message
+  var lastUnacknowledgedClient = ActorRef.noSender
+
+  def createPersistence() =
+    persistence = context.actorOf(persistenceProps, s"persistence_${self.path.name}")
+
+  override def preStart() = {
+    arbiter ! Join
+    createPersistence()
+  }
 
   def receive = {
     case JoinedPrimary => context.become(leader)
@@ -93,9 +111,14 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case None => kv -= k
           case Some(v) => kv += k -> v
         }
-        nextExpectedSnapshot += 1L
-        sender ! SnapshotAck(k, seq)
+        lastUnacknowledgedClient = sender()
+        persistence ! Persist(k, vOpt, seq)
       }
+
+    case Persisted(key, seq) =>
+      nextExpectedSnapshot += 1L
+      lastUnacknowledgedClient ! SnapshotAck(key, seq)
+
   }
 
   private def lookup(k: String, id: Long): Unit = {
