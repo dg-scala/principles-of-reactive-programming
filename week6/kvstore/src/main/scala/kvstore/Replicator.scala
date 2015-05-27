@@ -36,12 +36,12 @@ class Replicator(val replica: ActorRef) extends Actor {
 
   override def preStart() = context.setReceiveTimeout(100.millis)
 
-  def resendUnacknowledged() =
+  private def resendUnacknowledged() =
     for {
       (seq, req) <- acks
     } yield replica ! Snapshot(req._2.key, req._2.valueOption, seq)
 
-  def sendReplicatedFor(seq: Long) = {
+  private def sendReplicatedForSeq(seq: Long) = {
     acks.get(seq) match {
       case None =>
       case Some(repl) =>
@@ -61,7 +61,7 @@ class Replicator(val replica: ActorRef) extends Actor {
       resendUnacknowledged()
 
     case SnapshotAck(key, seq) =>
-      sendReplicatedFor(seq)
+      sendReplicatedForSeq(seq)
   }
 
 }
