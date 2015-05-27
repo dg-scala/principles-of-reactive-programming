@@ -54,5 +54,4 @@ class Step1_PrimarySpec extends TestKit(ActorSystem("Step1PrimarySpec"))
     client.getAndVerify("k1")
   }
 
-  
 }
