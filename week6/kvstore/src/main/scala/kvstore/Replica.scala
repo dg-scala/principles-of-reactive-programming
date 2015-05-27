@@ -1,16 +1,12 @@
 package kvstore
 
-import akka.actor.{OneForOneStrategy, Props, ActorRef, Actor}
+import akka.actor._
 import kvstore.Arbiter._
 import scala.collection.immutable.Queue
 import akka.actor.SupervisorStrategy.Restart
 import scala.annotation.tailrec
 import akka.pattern.{ask, pipe}
-import akka.actor.Terminated
 import scala.concurrent.duration._
-import akka.actor.PoisonPill
-import akka.actor.OneForOneStrategy
-import akka.actor.SupervisorStrategy
 import akka.util.Timeout
 import scala.Nothing
 
@@ -64,8 +60,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // persistence actor for this Replica
   var persistence = ActorRef.noSender
 
-  // keeps track of the sender of the last unacknowledged message
-  var lastUnacknowledgedClient = ActorRef.noSender
+  // keeps track of the message not yet persisted and its originator
+  var notPersisted = Map.empty[Long, (ActorRef, Persist)]
 
   def createPersistence() =
     persistence = context.actorOf(persistenceProps, s"persistence_${self.path.name}")
@@ -73,12 +69,18 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   override def preStart() = {
     arbiter ! Join
     createPersistence()
+    context.setReceiveTimeout(100.millis)
   }
 
   def receive = {
     case JoinedPrimary => context.become(leader)
     case JoinedSecondary => context.become(replica)
   }
+
+  private def persistUnconfirmed() =
+    for {
+      (seq, req) <- notPersisted
+    } yield persistence ! req._2
 
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
@@ -111,13 +113,20 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case None => kv -= k
           case Some(v) => kv += k -> v
         }
-        lastUnacknowledgedClient = sender()
-        persistence ! Persist(k, vOpt, seq)
+        notPersisted += seq ->(sender(), Persist(k, vOpt, seq))
+        persistUnconfirmed()
       }
+
+    case ReceiveTimeout =>
+      persistUnconfirmed()
 
     case Persisted(key, seq) =>
       nextExpectedSnapshot += 1L
-      lastUnacknowledgedClient ! SnapshotAck(key, seq)
+      notPersisted.get(seq) match {
+        case Some(req) => req._1 ! SnapshotAck(req._2.key, seq)
+        case None =>
+      }
+      notPersisted -= seq
 
   }
 
