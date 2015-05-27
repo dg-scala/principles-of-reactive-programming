@@ -85,13 +85,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Get(k, id) =>
       lookup(k, id)
 
-    case Snapshot(k, v, seq) =>
+    case Snapshot(k, vOpt, seq) =>
       if (seq < nextExpectedSnapshot)
         sender ! SnapshotAck(k, seq)
       else if (seq == nextExpectedSnapshot) {
-        v match {
+        vOpt match {
           case None => kv -= k
-          case Some(s) => kv += k -> s
+          case Some(v) => kv += k -> v
         }
         nextExpectedSnapshot += 1L
         sender ! SnapshotAck(k, seq)
