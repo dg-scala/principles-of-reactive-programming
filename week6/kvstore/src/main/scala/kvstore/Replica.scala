@@ -87,7 +87,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     } yield {
       persistence ! req._2
     }
-  
+
   private def cancelTimeout(id: Long) = {
     timeouts.get(id) match {
       case Some(t) => context.stop(t)
@@ -96,19 +96,56 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     timeouts -= id
   }
 
+  private def updateReplicas(rs: Set[ActorRef]) = {
+    val keys = secondaries.keys
+    for {
+      r <- keys
+    } yield {
+      if(!rs.contains(r)) {
+        secondaries.get(r) match {
+          case Some(replicator) =>
+            context.stop(replicator)
+            secondaries -= r
+          case None =>
+        }
+      }
+    }
+
+    for {
+      r <- rs
+    } yield {
+      secondaries.get(r) match {
+        case None =>
+          secondaries += r -> context.actorOf(Replicator.props(r), s"replicator_${r.path.name}")
+        case _ =>
+      }
+    }
+  }
+
+  private def replicateOperation(key: String, valOpt: Option[String], id: Long) =
+    for {
+      replicator <- secondaries.values
+    } yield {
+      replicator ! Replicate(key, valOpt, id)
+    }
+
+  private def doOperation(k: String, vOpt: Option[String], id: Long): Unit = {
+    timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
+    notPersisted += id ->(sender(), Persist(k, vOpt, id))
+    self ! Persist(k, vOpt, id)
+    replicateOperation(k, vOpt, id)
+  }
+
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
+    // Operation types handling
     case Insert(k, v, id) =>
       kv += k -> v
-      timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
-      notPersisted += id -> (sender(), Persist(k, Some(v), id))
-      self ! Persist(k, Some(v), id)
+      doOperation(k, Some(v), id)
 
     case Remove(k, id) =>
       kv -= k
-      timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
-      notPersisted += id -> (sender(), Persist(k, None, id))
-      self ! Persist(k, None, id)
+      doOperation(k, None, id)
 
     case Get(k, id) =>
       lookup(k, id)
@@ -120,6 +157,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         case None =>
       }
 
+    // Replication handling
+    case Replicas(rs) =>
+      updateReplicas(rs)
+
+    // Persistence handling
     case ReceiveTimeout =>
       persistUnconfirmed()
 
