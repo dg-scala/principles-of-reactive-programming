@@ -158,6 +158,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       lookup(k, id)
 
     case OperationTimedOut(id) =>
+      println(s"Operation Timed Out for $id")
       if (notPersisted.get(id).isDefined)
         notPersisted.get(id) match {
           case Some(res) => res._1 ! OperationFailed(id)
@@ -176,11 +177,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
     case Replicated(k, id) =>
       notReplicated.get(id) match {
-        case Some(x) => x._2 ! ReplicatorDone(sender())
+        case Some(x) => x._2 ! ReplicatorDone(sender(), replicators)
         case _ =>
       }
 
     case ReplicationFinished(id) =>
+      println(s"ReplicationFinished for $id")
       if (notPersisted.get(id).isEmpty)
         notReplicated.get(id) match {
           case None =>
