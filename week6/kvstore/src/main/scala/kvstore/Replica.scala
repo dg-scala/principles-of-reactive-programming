@@ -40,7 +40,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replica._
   import Replicator._
   import Persistence._
-  import RequestTimer._
+  import OperationTimeout._
   import context.dispatcher
 
   /*
@@ -64,6 +64,9 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // keeps track of the message not yet persisted and its originator
   var notPersisted = Map.empty[Long, (ActorRef, Persist)]
 
+  // keeps track of timeouts for the unacknowledged modify requests
+  var timeouts = Map.empty[Long, ActorRef]
+
   def createPersistence() =
     persistence = context.actorOf(persistenceProps, s"persistence_${self.path.name}")
 
@@ -84,18 +87,26 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     } yield {
       persistence ! req._2
     }
+  
+  private def cancelTimeout(id: Long) = {
+    timeouts.get(id) match {
+      case Some(t) => context.stop(t)
+      case None =>
+    }
+    timeouts -= id
+  }
 
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
     case Insert(k, v, id) =>
       kv += k -> v
-      val timer = context.actorOf(RequestTimer.props(id), s"timer_$id")
+      timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
       notPersisted += id -> (sender(), Persist(k, Some(v), id))
       self ! Persist(k, Some(v), id)
 
     case Remove(k, id) =>
       kv -= k
-      val timer = context.actorOf(RequestTimer.props(id), s"timer_$id")
+      timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
       notPersisted += id -> (sender(), Persist(k, None, id))
       self ! Persist(k, None, id)
 
@@ -103,7 +114,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       lookup(k, id)
 
     case OperationTimedOut(id) =>
-      context.stop(sender())
+      cancelTimeout(id)
       notPersisted.get(id) match {
         case Some(res) => res._1 ! OperationFailed(id)
         case None =>
@@ -115,6 +126,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Persisted(key, id) =>
       notPersisted.get(id) match {
         case Some(res) =>
+          cancelTimeout(id)
           res._1 ! OperationAck(id)
         case None =>
       }

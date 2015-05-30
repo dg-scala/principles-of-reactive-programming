@@ -3,14 +3,14 @@ package kvstore
 import akka.actor._
 import scala.concurrent.duration._
 
-object RequestTimer {
+object OperationTimeout {
   sealed trait Operation {
     def id: Long
   }
 
   case class OperationTimedOut(id: Long) extends Operation
 
-  def props(id: Long): Props = Props(new RequestTimer(id))
+  def props(id: Long): Props = Props(new OperationTimeout(id))
 }
 
 /**
@@ -21,10 +21,10 @@ object RequestTimer {
  *           timer is intended.
  */
 
-class RequestTimer(val id: Long) extends Actor {
-  import RequestTimer._
+class OperationTimeout(val id: Long) extends Actor {
+  import OperationTimeout._
 
-  override def preStart = context.setReceiveTimeout(1.second)
+  override def preStart() = context.setReceiveTimeout(1.second)
 
   def receive = {
     case ReceiveTimeout =>
