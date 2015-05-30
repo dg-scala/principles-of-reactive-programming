@@ -41,6 +41,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replicator._
   import Persistence._
   import OperationTimeout._
+  import ReplicatedCollector._
   import context.dispatcher
 
   /*
@@ -63,6 +64,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
   // keeps track of the message not yet persisted and its originator
   var notPersisted = Map.empty[Long, (ActorRef, Persist)]
+
+  // keeps track of the Replicated responses via the ReplicatedCollector
+  // reference (second in the pair). The first element in the value pair
+  // is the reference of the originator for the operation.
+  var notReplicated = Map.empty[Long, (ActorRef, ActorRef)]
 
   // keeps track of timeouts for the unacknowledged modify requests
   var timeouts = Map.empty[Long, ActorRef]
@@ -101,7 +107,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     for {
       r <- keys
     } yield {
-      if(!rs.contains(r)) {
+      if (!rs.contains(r)) {
         secondaries.get(r) match {
           case Some(replicator) =>
             context.stop(replicator)
@@ -134,6 +140,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     notPersisted += id ->(sender(), Persist(k, vOpt, id))
     self ! Persist(k, vOpt, id)
     replicateOperation(k, vOpt, id)
+    notReplicated += id ->(sender(), context.actorOf(ReplicatedCollector.props(id, replicators), s"collector_$id"))
   }
 
   /* TODO Behavior for  the leader role. */
@@ -151,15 +158,38 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       lookup(k, id)
 
     case OperationTimedOut(id) =>
+      if (notPersisted.get(id).isDefined)
+        notPersisted.get(id) match {
+          case Some(res) => res._1 ! OperationFailed(id)
+          case None =>
+        }
+      else if (notReplicated.get(id).isDefined)
+        notReplicated.get(id) match {
+          case Some(res) => res._1 ! OperationFailed(id)
+          case None =>
+        }
       cancelTimeout(id)
-      notPersisted.get(id) match {
-        case Some(res) => res._1 ! OperationFailed(id)
-        case None =>
-      }
 
     // Replication handling
     case Replicas(rs) =>
       updateReplicas(rs)
+
+    case Replicated(k, id) =>
+      notReplicated.get(id) match {
+        case Some(x) => x._2 ! ReplicatorDone(sender())
+        case _ =>
+      }
+
+    case ReplicationFinished(id) =>
+      if (notPersisted.get(id).isEmpty)
+        notReplicated.get(id) match {
+          case None =>
+          case Some(x) =>
+            x._1 ! OperationAck(id)
+            notReplicated -= id
+            context.stop(sender())
+            cancelTimeout(id)
+        }
 
     // Persistence handling
     case ReceiveTimeout =>
@@ -168,11 +198,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Persisted(key, id) =>
       notPersisted.get(id) match {
         case Some(res) =>
-          cancelTimeout(id)
-          res._1 ! OperationAck(id)
+          if (notReplicated.get(id).isEmpty) {
+            res._1 ! OperationAck(id)
+            cancelTimeout(id)
+            notPersisted -= id
+          }
         case None =>
       }
-      notPersisted -= id
   }
 
   // the sequence number of the next expected snapshot
