@@ -40,6 +40,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   import Replica._
   import Replicator._
   import Persistence._
+  import RequestTimer._
   import context.dispatcher
 
   /*
@@ -80,21 +81,44 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   private def persistUnconfirmed() =
     for {
       (seq, req) <- notPersisted
-    } yield persistence ! req._2
+    } yield {
+      persistence ! req._2
+    }
 
   /* TODO Behavior for  the leader role. */
   val leader: Receive = {
     case Insert(k, v, id) =>
       kv += k -> v
-      sender ! OperationAck(id)
+      val timer = context.actorOf(RequestTimer.props(id), s"timer_$id")
+      notPersisted += id -> (sender(), Persist(k, Some(v), id))
+      self ! Persist(k, Some(v), id)
 
     case Remove(k, id) =>
       kv -= k
-      sender ! OperationAck(id)
+      val timer = context.actorOf(RequestTimer.props(id), s"timer_$id")
+      notPersisted += id -> (sender(), Persist(k, None, id))
+      self ! Persist(k, None, id)
 
     case Get(k, id) =>
       lookup(k, id)
 
+    case OperationTimedOut(id) =>
+      context.stop(sender())
+      notPersisted.get(id) match {
+        case Some(res) => res._1 ! OperationFailed(id)
+        case None =>
+      }
+
+    case ReceiveTimeout =>
+      persistUnconfirmed()
+
+    case Persisted(key, id) =>
+      notPersisted.get(id) match {
+        case Some(res) =>
+          res._1 ! OperationAck(id)
+        case None =>
+      }
+      notPersisted -= id
   }
 
   // the sequence number of the next expected snapshot
@@ -114,7 +138,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case Some(v) => kv += k -> v
         }
         notPersisted += seq ->(sender(), Persist(k, vOpt, seq))
-        persistUnconfirmed()
+        self ! Persist(k, vOpt, seq)
       }
 
     case ReceiveTimeout =>
