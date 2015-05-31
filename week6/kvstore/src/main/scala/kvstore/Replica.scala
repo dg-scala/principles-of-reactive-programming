@@ -11,7 +11,6 @@ import akka.util.Timeout
 import scala.Nothing
 
 object Replica {
-
   sealed trait Operation {
     def key: String
 
@@ -90,14 +89,12 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   private def persistUnconfirmed() =
     for {
       (seq, req) <- notPersisted
-    } yield {
-      persistence ! req._2
-    }
+    } yield persistence ! req._2
 
   private def cancelTimeout(id: Long) = {
     timeouts.get(id) match {
-      case Some(t) => context.stop(t)
       case None =>
+      case Some(t) => context.stop(t)
     }
     timeouts -= id
   }
@@ -125,6 +122,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     } yield {
       if (!rs.contains(r)) {
         secondaries.get(r) match {
+          case None =>
           case Some(replicator) =>
             context.stop(replicator)
             secondaries -= r
@@ -132,7 +130,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
             for {
               (k, v) <- notReplicated
             } yield v._2 ! StopMonitoring(replicator)
-          case None =>
         }
       }
     }
@@ -190,8 +187,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       kv -= k
       doOperation(k, None, id)
 
-    case Get(k, id) =>
-      lookup(k, id)
+    case Get(k, id) => lookup(k, id)
 
     case OperationTimedOut(id) =>
       if (notPersisted.get(id).isDefined)
@@ -207,8 +203,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       cancelTimeout(id)
 
     // Replication handling
-    case Replicas(rs) =>
-      updateReplicas(rs)
+    case Replicas(rs) => updateReplicas(rs)
 
     case Replicated(k, id) =>
       notReplicated.get(id) match {
@@ -228,8 +223,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       notReplicated -= id
 
     // Persistence handling
-    case ReceiveTimeout =>
-      persistUnconfirmed()
+    case ReceiveTimeout => persistUnconfirmed()
 
     case Persisted(key, id) =>
       notPersisted.get(id) match {
@@ -263,8 +257,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         self ! Persist(k, vOpt, seq)
       }
 
-    case ReceiveTimeout =>
-      persistUnconfirmed()
+    case ReceiveTimeout => persistUnconfirmed()
 
     case Persisted(key, seq) =>
       nextExpectedSnapshot += 1L
@@ -273,7 +266,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         case Some(req) => req._1 ! SnapshotAck(req._2.key, seq)
       }
       notPersisted -= seq
-
   }
 
   private def lookup(k: String, id: Long): Unit = {

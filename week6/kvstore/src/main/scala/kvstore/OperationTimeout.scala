@@ -4,10 +4,10 @@ import akka.actor._
 import scala.concurrent.duration._
 
 object OperationTimeout {
+  
   sealed trait Operation {
     def id: Long
   }
-
   case class OperationTimedOut(id: Long) extends Operation
 
   def props(id: Long): Props = Props(new OperationTimeout(id))
@@ -22,6 +22,7 @@ object OperationTimeout {
  */
 
 class OperationTimeout(val id: Long) extends Actor {
+ 
   import OperationTimeout._
 
   override def preStart() = context.setReceiveTimeout(1.second)
@@ -30,4 +31,5 @@ class OperationTimeout(val id: Long) extends Actor {
     case ReceiveTimeout =>
       context.parent ! OperationTimedOut(id)
   }
+
 }
