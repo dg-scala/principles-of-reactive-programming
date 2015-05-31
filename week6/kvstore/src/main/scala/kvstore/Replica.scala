@@ -111,9 +111,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   private def sendSnapshotToReplicator(replicator: ActorRef) =
     for {
       (k, v) <- kv
-    } yield {
-      replicator ! Replicate(k, Some(v), nextSnapshotId)
-    }
+    } yield replicator ! Replicate(k, Some(v), nextSnapshotId)
 
   private def updateReplicas(rs: Set[ActorRef]) = {
     val keys = secondaries.keys
@@ -125,6 +123,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           case Some(replicator) =>
             context.stop(replicator)
             secondaries -= r
+            replicators -= replicator
+            for {
+              (k, v) <- notReplicated
+            } yield v._2 ! StopMonitoring(replicator)
           case None =>
         }
       }
@@ -184,7 +186,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case OperationTimedOut(id) =>
       if (notPersisted.get(id).isDefined)
         notPersisted.get(id) match {
-          case Some(res) => res._1 ! OperationFailed(id)
+          case Some(res) =>
+            res._1 ! OperationFailed(id)
           case None =>
         }
       else if (notReplicated.get(id).isDefined)
@@ -200,7 +203,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
     case Replicated(k, id) =>
       notReplicated.get(id) match {
-        case Some(x) => x._2 ! ReplicatorDone(sender(), replicators)
+        case Some(x) => x._2 ! ReplicatorDone(sender())
         case _ =>
       }
 
@@ -269,4 +272,3 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     sender ! GetResult(k, res, id)
   }
 }
-
