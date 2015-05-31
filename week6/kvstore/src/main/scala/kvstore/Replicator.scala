@@ -44,8 +44,7 @@ class Replicator(val replica: ActorRef) extends Actor {
   private def sendReplicatedForSeq(seq: Long) = {
     acks.get(seq) match {
       case None =>
-      case Some(repl) =>
-        repl._1 ! Replicated(repl._2.key, repl._2.id )
+      case Some(repl) => repl._1 ! Replicated(repl._2.key, repl._2.id )
     }
     acks -= seq
   }
@@ -57,11 +56,9 @@ class Replicator(val replica: ActorRef) extends Actor {
       acks += seq -> (sender(), Replicate(k, vOpt, id))
       replica ! Snapshot(k, vOpt, seq)
 
-    case ReceiveTimeout =>
-      resendUnacknowledged()
+    case ReceiveTimeout => resendUnacknowledged()
 
-    case SnapshotAck(key, seq) =>
-      sendReplicatedForSeq(seq)
+    case SnapshotAck(key, seq) => sendReplicatedForSeq(seq)
   }
 
 }

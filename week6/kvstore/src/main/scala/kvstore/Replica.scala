@@ -103,15 +103,20 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   }
 
   var snapshotId: Long = 0L
+
   def nextSnapshotId = {
     snapshotId -= 1
     snapshotId
   }
-  
+
   private def sendSnapshotToReplicator(replicator: ActorRef) =
     for {
       (k, v) <- kv
-    } yield replicator ! Replicate(k, Some(v), nextSnapshotId)
+    } yield {
+      val id = nextSnapshotId
+      replicator ! Replicate(k, Some(v), id)
+      createCollectorForOperation(id)
+    }
 
   private def updateReplicas(rs: Set[ActorRef]) = {
     val keys = secondaries.keys
@@ -147,7 +152,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     }
   }
 
-  var collectorSeq: Long = -1
+  var collectorSeq: Long = -1L
 
   def nextCollectorSeq() = {
     collectorSeq += 1
@@ -159,8 +164,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       replicator <- secondaries.values
     } yield {
       replicator ! Replicate(key, valOpt, id)
-      notReplicated += id ->(sender(), context.actorOf(ReplicatedCollector.props(id, replicators), s"collector_${nextCollectorSeq()}"))
+      createCollectorForOperation(id)
     }
+
+  def createCollectorForOperation(id: Long): Unit = {
+    val collectorId = nextCollectorSeq()
+    notReplicated += id ->(sender(), context.actorOf(ReplicatedCollector.props(id, replicators), s"collector_${collectorId}"))
+  }
 
   private def doOperation(k: String, vOpt: Option[String], id: Long): Unit = {
     timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
@@ -186,14 +196,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case OperationTimedOut(id) =>
       if (notPersisted.get(id).isDefined)
         notPersisted.get(id) match {
-          case Some(res) =>
-            res._1 ! OperationFailed(id)
           case None =>
+          case Some(res) => res._1 ! OperationFailed(id)
         }
       else if (notReplicated.get(id).isDefined)
         notReplicated.get(id) match {
-          case Some(res) => res._1 ! OperationFailed(id)
           case None =>
+          case Some(res) => res._1 ! OperationFailed(id)
         }
       cancelTimeout(id)
 
@@ -212,11 +221,11 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
         notReplicated.get(id) match {
           case None =>
           case Some(x) =>
-            x._1 ! OperationAck(id)
-            notReplicated -= id
+            if (id >= 0) x._1 ! OperationAck(id)
             context.stop(sender())
             cancelTimeout(id)
         }
+      notReplicated -= id
 
     // Persistence handling
     case ReceiveTimeout =>
@@ -224,13 +233,13 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
 
     case Persisted(key, id) =>
       notPersisted.get(id) match {
+        case None =>
         case Some(res) =>
           if (notReplicated.get(id).isEmpty) {
-            res._1 ! OperationAck(id)
+            if (id >= 0) res._1 ! OperationAck(id)
             cancelTimeout(id)
           }
           notPersisted -= id
-        case None =>
       }
   }
 
@@ -260,8 +269,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     case Persisted(key, seq) =>
       nextExpectedSnapshot += 1L
       notPersisted.get(seq) match {
-        case Some(req) => req._1 ! SnapshotAck(req._2.key, seq)
         case None =>
+        case Some(req) => req._1 ! SnapshotAck(req._2.key, seq)
       }
       notPersisted -= seq
 

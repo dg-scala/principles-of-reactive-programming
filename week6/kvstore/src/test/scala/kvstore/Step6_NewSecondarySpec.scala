@@ -25,7 +25,7 @@ class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"
 
   test("case1: Primary must start replication to new replicas") {
     val arbiter = TestProbe()
-        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = true)), "case1-primary")
+        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case1-primary")
         val user = session(primary)
     val secondary = TestProbe()
 
@@ -51,7 +51,7 @@ class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"
 
   test("case2: Primary must stop replication to removed replicas and stop Replicator") {
     val arbiter = TestProbe()
-        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = true)), "case2-primary")
+        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case2-primary")
         val user = session(primary)
     val secondary = TestProbe()
 
@@ -72,7 +72,7 @@ class Step6_NewSecondarySpec extends TestKit(ActorSystem("Step6NewSecondarySpec"
 
   test("case3: Primary must stop replication to removed replicas and waive their outstanding acknowledgements") {
     val arbiter = TestProbe()
-        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = true)), "case3-primary")
+        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case3-primary")
         val user = session(primary)
     val secondary = TestProbe()
 

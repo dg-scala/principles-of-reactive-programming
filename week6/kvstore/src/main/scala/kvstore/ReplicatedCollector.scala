@@ -21,8 +21,9 @@ class ReplicatedCollector(id: Long, replicators: Set[ActorRef]) extends Actor {
   def receive: Receive = {
     case ReplicatorDone(r) =>
       unprocessed -= r
-      if (unprocessed.isEmpty)
+      if (unprocessed.isEmpty) {
         sender() ! ReplicationFinished(id)
+      }
     case StopMonitoring(replicator) =>
       if (unprocessed.contains(replicator))
         unprocessed -= replicator
