@@ -102,9 +102,18 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     timeouts -= id
   }
 
-  private def sendSnapshot(replicator: ActorRef) = {
-    // TODO Step 6 - send Snapshot to new replicators and wait for responses!!!
+  var snapshotId: Long = 0L
+  def nextSnapshotId = {
+    snapshotId -= 1
+    snapshotId
   }
+  
+  private def sendSnapshotToReplicator(replicator: ActorRef) =
+    for {
+      (k, v) <- kv
+    } yield {
+      replicator ! Replicate(k, Some(v), nextSnapshotId)
+    }
 
   private def updateReplicas(rs: Set[ActorRef]) = {
     val keys = secondaries.keys
@@ -130,7 +139,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
             val replicator = context.actorOf(Replicator.props(r), s"replicator_${r.path.name}")
             secondaries += r -> replicator
             replicators += replicator
-            sendSnapshot(replicator)
+            sendSnapshotToReplicator(replicator)
           case _ =>
         }
     }
@@ -158,7 +167,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     replicateOperation(k, vOpt, id)
   }
 
-  /* TODO Behavior for  the leader role. */
+  /* Behavior for  the leader role. */
   val leader: Receive = {
     // Operation types handling
     case Insert(k, v, id) =>
@@ -225,7 +234,7 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
   // the sequence number of the next expected snapshot
   var nextExpectedSnapshot = 0L
 
-  /* TODO Behavior for the replica role. */
+  /* Behavior for the replica role. */
   val replica: Receive = {
     case Get(k, id) =>
       lookup(k, id)

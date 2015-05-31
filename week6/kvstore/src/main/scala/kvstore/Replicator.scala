@@ -50,7 +50,7 @@ class Replicator(val replica: ActorRef) extends Actor {
     acks -= seq
   }
 
-  /* TODO Behavior for the Replicator. */
+  /* Behavior for the Replicator. */
   def receive: Receive = {
     case Replicate(k, vOpt, id) =>
       val seq = nextSeq
