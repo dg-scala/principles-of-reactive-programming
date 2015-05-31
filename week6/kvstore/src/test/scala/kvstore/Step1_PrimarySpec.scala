@@ -31,14 +31,14 @@ class Step1_PrimarySpec extends TestKit(ActorSystem("Step1PrimarySpec"))
 
   test("case1: Primary (in isolation) should properly register itself to the provided Arbiter") {
     val arbiter = TestProbe()
-        system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case1-primary")
+        system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = true)), "case1-primary")
 
     arbiter.expectMsg(Join)
   }
 
   test("case2: Primary (in isolation) should react properly to Insert, Remove, Get") {
     val arbiter = TestProbe()
-        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case2-primary")
+        val primary = system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = true)), "case2-primary")
         val client = session(primary)
 
     arbiter.expectMsg(Join)
