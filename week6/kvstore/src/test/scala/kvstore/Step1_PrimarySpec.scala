@@ -29,12 +29,12 @@ class Step1_PrimarySpec extends TestKit(ActorSystem("Step1PrimarySpec"))
 
   import Arbiter._
 
-//  test("case1: Primary (in isolation) should properly register itself to the provided Arbiter") {
-//    val arbiter = TestProbe()
-//        system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case1-primary")
-//
-//    arbiter.expectMsg(Join)
-//  }
+  test("case1: Primary (in isolation) should properly register itself to the provided Arbiter") {
+    val arbiter = TestProbe()
+        system.actorOf(Replica.props(arbiter.ref, Persistence.props(flaky = false)), "case1-primary")
+
+    arbiter.expectMsg(Join)
+  }
 
   test("case2: Primary (in isolation) should react properly to Insert, Remove, Get") {
     val arbiter = TestProbe()
@@ -46,12 +46,12 @@ class Step1_PrimarySpec extends TestKit(ActorSystem("Step1PrimarySpec"))
 
     client.getAndVerify("k1")
     client.setAcked("k1", "v1")
-//    client.getAndVerify("k1")
-//    client.getAndVerify("k2")
-//    client.setAcked("k2", "v2")
-//    client.getAndVerify("k2")
-//    client.removeAcked("k1")
-//    client.getAndVerify("k1")
+    client.getAndVerify("k1")
+    client.getAndVerify("k2")
+    client.setAcked("k2", "v2")
+    client.getAndVerify("k2")
+    client.removeAcked("k1")
+    client.getAndVerify("k1")
   }
 
 }

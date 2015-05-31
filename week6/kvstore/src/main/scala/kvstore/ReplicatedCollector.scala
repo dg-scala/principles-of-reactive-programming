@@ -14,7 +14,8 @@ class ReplicatedCollector(id: Long, replicators: Set[ActorRef]) extends Actor {
   
   var unprocessed = Set.empty[ActorRef]
   
-  override def preStart() = replicators foreach { r: ActorRef => unprocessed += r }
+  override def preStart() =
+    replicators foreach { r: ActorRef => unprocessed += r }
   
   def receive: Receive = {
     case ReplicatorDone(r, rs) =>

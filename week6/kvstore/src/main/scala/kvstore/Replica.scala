@@ -102,6 +102,10 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     timeouts -= id
   }
 
+  private def sendSnapshot(replicator: ActorRef) = {
+    // TODO Step 6 - send Snapshot to new replicators and wait for responses!!!
+  }
+
   private def updateReplicas(rs: Set[ActorRef]) = {
     val keys = secondaries.keys
     for {
@@ -120,12 +124,23 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
     for {
       r <- rs
     } yield {
-      secondaries.get(r) match {
-        case None =>
-          secondaries += r -> context.actorOf(Replicator.props(r), s"replicator_${r.path.name}")
-        case _ =>
-      }
+      if (r != self)
+        secondaries.get(r) match {
+          case None =>
+            val replicator = context.actorOf(Replicator.props(r), s"replicator_${r.path.name}")
+            secondaries += r -> replicator
+            replicators += replicator
+            sendSnapshot(replicator)
+          case _ =>
+        }
     }
+  }
+
+  var collectorSeq: Long = -1
+
+  def nextCollectorSeq() = {
+    collectorSeq += 1
+    collectorSeq
   }
 
   private def replicateOperation(key: String, valOpt: Option[String], id: Long) =
@@ -133,14 +148,14 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       replicator <- secondaries.values
     } yield {
       replicator ! Replicate(key, valOpt, id)
+      notReplicated += id ->(sender(), context.actorOf(ReplicatedCollector.props(id, replicators), s"collector_${nextCollectorSeq()}"))
     }
 
   private def doOperation(k: String, vOpt: Option[String], id: Long): Unit = {
     timeouts += id -> context.actorOf(OperationTimeout.props(id), s"timer_$id")
     notPersisted += id ->(sender(), Persist(k, vOpt, id))
-    self ! Persist(k, vOpt, id)
+    persistence ! Persist(k, vOpt, id)
     replicateOperation(k, vOpt, id)
-    notReplicated += id ->(sender(), context.actorOf(ReplicatedCollector.props(id, replicators), s"collector_$id"))
   }
 
   /* TODO Behavior for  the leader role. */
@@ -158,7 +173,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       lookup(k, id)
 
     case OperationTimedOut(id) =>
-      println(s"Operation Timed Out for $id")
       if (notPersisted.get(id).isDefined)
         notPersisted.get(id) match {
           case Some(res) => res._1 ! OperationFailed(id)
@@ -182,7 +196,6 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
       }
 
     case ReplicationFinished(id) =>
-      println(s"ReplicationFinished for $id")
       if (notPersisted.get(id).isEmpty)
         notReplicated.get(id) match {
           case None =>
@@ -203,8 +216,8 @@ class Replica(val arbiter: ActorRef, persistenceProps: Props) extends Actor {
           if (notReplicated.get(id).isEmpty) {
             res._1 ! OperationAck(id)
             cancelTimeout(id)
-            notPersisted -= id
           }
+          notPersisted -= id
         case None =>
       }
   }
